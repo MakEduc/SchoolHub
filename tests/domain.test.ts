@@ -29,10 +29,14 @@ test("questions require an appropriate destination, concise text, and an empty h
   assert.ok(!questionSchema.safeParse({ ...valid, website: "spam" }).success);
   assert.ok(!questionSchema.safeParse({ ...valid, recipientId: "10000000-0000-4000-8000-000000000001" }).success);
 });
-test("study validation enforces programme/year, end time, capacity, and maximum duration", () => {
-  const session = { programme: "DP", grade: "Grade I", subjectId: "10000000-0000-4000-8000-000000000001", focus: "Vectors", locationId: "10000000-0000-4000-8000-000000000002", customLocation: null, startsAt: "2026-10-06T12:00:00.000Z", endsAt: "2026-10-06T13:00:00.000Z", openSpots: null, hostName: null, contact: null };
+test("study validation enforces programme, grade, meeting place, end time, capacity, and maximum duration", () => {
+  const session = { programme: "IB", grade: "Grade I", subjectId: "10000000-0000-4000-8000-000000000001", focus: "Vectors", meetingPlace: "Library, upstairs table", startsAt: "2026-10-06T12:00:00.000Z", endsAt: "2026-10-06T13:00:00.000Z", openSpots: null, hostName: null, contact: null };
   assert.ok(studySchema.safeParse(session).success);
   assert.ok(!studySchema.safeParse({ ...session, grade: "MYP 3" }).success);
+  assert.ok(!studySchema.safeParse({ ...session, programme: "DP" }).success);
+  assert.ok(!studySchema.safeParse({ ...session, meetingPlace: "   " }).success);
+  assert.ok(studySchema.safeParse({ ...session, programme: "National", grade: "Grade IV" }).success);
+  assert.ok(studySchema.safeParse({ ...session, grade: "Grade IV" }).success);
   assert.ok(!studySchema.safeParse({ ...session, endsAt: session.startsAt }).success);
   assert.ok(!studySchema.safeParse({ ...session, openSpots: 0 }).success);
   assert.ok(!studySchema.safeParse({ ...session, endsAt: "2026-10-07T13:00:00.000Z" }).success);

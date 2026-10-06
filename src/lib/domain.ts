@@ -1,13 +1,9 @@
 import { z } from "zod";
 
 export const SCHOOL_TIMEZONE = process.env.NEXT_PUBLIC_SCHOOL_TIMEZONE || "Europe/Warsaw";
-export const PROGRAMMES = ["MYP", "DP", "National Curriculum"] as const;
+export const PROGRAMMES = ["IB", "National"] as const;
 export type Programme = typeof PROGRAMMES[number];
-export const GRADES: Record<Programme, readonly string[]> = {
-  MYP: ["MYP 1", "MYP 2", "MYP 3", "MYP 4", "MYP 5"],
-  DP: ["Grade I", "Grade II"],
-  "National Curriculum": ["Grade I", "Grade II", "Grade III", "Grade IV"],
-};
+export const GRADES = ["Grade I", "Grade II", "Grade III", "Grade IV"] as const;
 export const questionSchema = z.object({
   body: z.string().trim().min(3, "Write at least 3 characters.").max(280, "Keep your question within 280 characters."),
   recipientType: z.enum(["teacher", "department", "general"]),
@@ -16,14 +12,13 @@ export const questionSchema = z.object({
 }).refine(v => v.recipientType === "general" ? v.recipientId === null : v.recipientId !== null,
   { message: "Choose a teacher or department." });
 export const studySchema = z.object({
-  programme: z.enum(PROGRAMMES), grade: z.string(), subjectId: z.uuid(),
-  focus: z.string().trim().min(3).max(80), locationId: z.uuid(),
-  customLocation: z.string().trim().max(80).nullable(),
+  programme: z.enum(PROGRAMMES), grade: z.enum(GRADES), subjectId: z.uuid(),
+  focus: z.string().trim().min(3).max(80), meetingPlace: z.string().trim().min(1, "Type your meeting place.").max(80),
   startsAt: z.iso.datetime(), endsAt: z.iso.datetime(),
   openSpots: z.number().int().min(1).max(99).nullable(),
   hostName: z.string().trim().max(60).nullable(), contact: z.string().trim().max(80).nullable(),
   website: z.string().max(0).optional(),
-}).refine(v => GRADES[v.programme].includes(v.grade), { message: "Choose a valid year for your programme." })
+})
   .refine(v => new Date(v.endsAt) > new Date(v.startsAt), { message: "End time must be after start time." })
   .refine(v => new Date(v.endsAt).getTime() - new Date(v.startsAt).getTime() <= 12 * 3600_000,
     { message: "A session can last up to 12 hours." });
@@ -72,7 +67,7 @@ export function schoolDate(date = new Date()) {
 export function schoolTime(iso: string) {
   return new Intl.DateTimeFormat("en-GB", { timeZone: SCHOOL_TIMEZONE, hour: "2-digit", minute: "2-digit" }).format(new Date(iso));
 }
-export function programmeClass(p: string) { return p === "DP" ? "dp" : p === "MYP" ? "myp" : "national"; }
+export function programmeClass(p: string) { return p === "IB" ? "dp" : "national"; }
 
 export interface DirectoryItem { id: string; name: string }
 export interface Teacher { id: string; display_name: string }

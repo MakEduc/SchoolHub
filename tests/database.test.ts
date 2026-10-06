@@ -17,6 +17,16 @@ test("Postgres schema enforces RLS, public projections, expiration, and atomic d
     .replace("create extension if not exists pgcrypto;", "-- gen_random_uuid is built in to this test Postgres.")
     .replace(/alter publication supabase_realtime add table [^;]+;/, "-- Publication transport is provided by Supabase, not embedded Postgres.");
   await db.exec(migration);
+  await db.exec(`insert into public.study_sessions(programme,grade,subject_id,focus,location_id,starts_at,ends_at,management_token_hash)
+    select 'DP','Grade I',s.id,'Legacy session',l.id,now(),now()+interval '1 hour','legacy-key' from public.subjects s cross join public.locations l where s.name='Physics' and l.name='Library';`);
+  await db.exec(await readFile(new URL("../supabase/migrations/202610060003_library_details.sql", import.meta.url), "utf8"));
+  const legacy = (await db.query<{programme:string;custom_location:string;management_token_hash:string}>("select programme,custom_location,management_token_hash from public.study_sessions where focus='Legacy session'")).rows[0];
+  assert.deepEqual(legacy, {programme:'IB',custom_location:'Library',management_token_hash:'legacy-key'});
+  await db.exec("delete from public.study_sessions where focus='Legacy session'");
+  await assert.rejects(db.exec(`insert into public.study_sessions(programme,grade,subject_id,focus,location_id,custom_location,starts_at,ends_at,management_token_hash)
+    select 'DP','Grade I',s.id,'Invalid programme',l.id,'Library',now(),now()+interval '1 hour','test-key' from public.subjects s cross join public.locations l where s.name='Physics' and l.name='Library';`), /constraint/);
+  await assert.rejects(db.exec(`insert into public.study_sessions(programme,grade,subject_id,focus,location_id,custom_location,starts_at,ends_at,management_token_hash)
+    select 'IB','Grade IV',s.id,'Missing place',l.id,'   ',now(),now()+interval '1 hour','test-key' from public.subjects s cross join public.locations l where s.name='Physics' and l.name='Library';`), /constraint/);
   const teacher = "20000000-0000-4000-8000-000000000001", other = "20000000-0000-4000-8000-000000000002", admin = "20000000-0000-4000-8000-000000000003";
   const department = "10000000-0000-4000-8000-000000000001";
   await db.query("insert into auth.users values ($1),($2),($3)", [teacher, other, admin]);
@@ -54,10 +64,10 @@ test("Postgres schema enforces RLS, public projections, expiration, and atomic d
     await db.exec("reset role");
   });
   await t.test("active study view hides expired/cancelled sessions and management secrets", async () => {
-    await db.exec(`insert into public.study_sessions(programme,grade,subject_id,focus,location_id,starts_at,ends_at,management_token_hash)
-      select 'DP','Grade I',s.id,'Vectors',l.id,now()-interval '1 hour',now()+interval '1 hour','private-hash' from public.subjects s cross join public.locations l where s.name='Physics' and l.name='Library';
-      insert into public.study_sessions(programme,grade,subject_id,focus,location_id,starts_at,ends_at,management_token_hash)
-      select 'DP','Grade I',s.id,'Expired',l.id,now()-interval '2 hours',now()-interval '1 hour','other-hash' from public.subjects s cross join public.locations l where s.name='Physics' and l.name='Library';
+    await db.exec(`insert into public.study_sessions(programme,grade,subject_id,focus,location_id,custom_location,starts_at,ends_at,management_token_hash)
+      select 'IB','Grade I',s.id,'Vectors',l.id,'Library',now()-interval '1 hour',now()+interval '1 hour','private-hash' from public.subjects s cross join public.locations l where s.name='Physics' and l.name='Library';
+      insert into public.study_sessions(programme,grade,subject_id,focus,location_id,custom_location,starts_at,ends_at,management_token_hash)
+      select 'IB','Grade I',s.id,'Expired',l.id,'Library',now()-interval '2 hours',now()-interval '1 hour','other-hash' from public.subjects s cross join public.locations l where s.name='Physics' and l.name='Library';
       set role anon;`);
     const active = (await db.query<Record<string, unknown>>("select * from public.active_study_sessions")).rows;
     assert.equal(active.length, 1); assert.equal(active[0].focus, "Vectors");

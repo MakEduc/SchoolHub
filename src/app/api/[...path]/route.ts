@@ -23,7 +23,7 @@ export async function GET(request: NextRequest, context: Context) {
       return json({ departments: results[0].data, subjects: results[1].data, locations: results[2].data, teachers: results[3].data });
     }
     if (route === "studies") {
-      const result = await pub.from("active_study_sessions").select("*").order("starts_at").limit(200);
+      const result = await pub.from("active_study_sessions").select("*").in("programme", ["IB", "National"]).order("starts_at").limit(200);
       dbError(result.error); return json(result.data);
     }
     if (route === "boards") {
@@ -110,12 +110,11 @@ export async function POST(request: NextRequest, context: Context) {
       await rateLimit(request, "studies", 5, 3600);
       if (new Date(data.endsAt).getTime() <= Date.now()) throw new ApiError("Choose a session that has not ended.");
       if (new Date(data.startsAt).getTime() > Date.now() + 30 * 86400_000) throw new ApiError("Post sessions up to 30 days ahead.");
-      const location = await admin.from("locations").select("name").eq("id", data.locationId).maybeSingle();
-      dbError(location.error); if (!location.data) throw new ApiError("Choose a location.");
-      if (location.data.name === "Other" && !data.customLocation) throw new ApiError("Describe your meeting place.");
+      const location = await admin.from("locations").select("id").eq("name", "Other").maybeSingle();
+      dbError(location.error); if (!location.data) throw new ApiError("Meeting places are unavailable. Apply the database migrations.", 503);
       const managementToken = token();
       const result = await admin.from("study_sessions").insert({ programme: data.programme, grade: data.grade,
-        subject_id: data.subjectId, focus: data.focus, location_id: data.locationId, custom_location: location.data.name === "Other" ? data.customLocation : null,
+        subject_id: data.subjectId, focus: data.focus, location_id: location.data!.id, custom_location: data.meetingPlace,
         starts_at: data.startsAt, ends_at: data.endsAt, open_spots: data.openSpots, host_name: data.hostName || null, contact: data.contact || null,
         management_token_hash: hash(managementToken),
       }).select("id").single(); dbError(result.error);
@@ -123,7 +122,7 @@ export async function POST(request: NextRequest, context: Context) {
     }
     if (route === "studies/manage") {
       const input = z.object({ id: uuid, token: z.string().regex(/^[a-f0-9]{64}$/), action: z.enum(["read", "cancel", "update"]), data: studySchema.optional() }).parse(body);
-      const result = await admin.from("study_sessions").select("id,programme,grade,subject_id,focus,location_id,custom_location,starts_at,ends_at,open_spots,host_name,contact,cancelled_at")
+      const result = await admin.from("study_sessions").select("id,programme,grade,subject_id,focus,location_id,custom_location,starts_at,ends_at,open_spots,host_name,contact,cancelled_at,location:locations(name)")
         .eq("id", input.id).eq("management_token_hash", hash(input.token)).maybeSingle();
       dbError(result.error); if (!result.data) throw new ApiError("This management link is invalid.", 403);
       if (input.action === "read") return json(result.data);
@@ -136,11 +135,11 @@ export async function POST(request: NextRequest, context: Context) {
       const data = input.data;
       if (new Date(data.endsAt).getTime() <= Date.now()) throw new ApiError("Choose a session that has not ended.");
       if (new Date(data.startsAt).getTime() > Date.now() + 30 * 86400_000) throw new ApiError("Post sessions up to 30 days ahead.");
-      const location = await admin.from("locations").select("name").eq("id", data.locationId).maybeSingle();
+      const location = await admin.from("locations").select("id").eq("name", "Other").maybeSingle();
       dbError(location.error);
-      if (!location.data || (location.data.name === "Other" && !data.customLocation)) throw new ApiError("Specify your meeting place.");
+      if (!location.data) throw new ApiError("Meeting places are unavailable. Apply the database migrations.", 503);
       const updated = await admin.from("study_sessions").update({ programme: data.programme, grade: data.grade, subject_id: data.subjectId,
-        focus: data.focus, location_id: data.locationId, custom_location: location.data.name === "Other" ? data.customLocation : null,
+        focus: data.focus, location_id: location.data!.id, custom_location: data.meetingPlace,
         starts_at: data.startsAt, ends_at: data.endsAt, open_spots: data.openSpots, host_name: data.hostName || null, contact: data.contact || null,
       }).eq("id", input.id).eq("management_token_hash", hash(input.token));
       dbError(updated.error); return json({ success: true });

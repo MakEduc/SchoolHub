@@ -21,6 +21,7 @@ The REST API keys can access tables, but cannot execute schema migrations. Open 
 
 1. `supabase/migrations/202610060001_schoolhub.sql` — tables, constraints, public projection views, RLS policies, server-only RPCs, school-directory seed data, and Realtime publication.
 2. `supabase/migrations/202610060002_cleanup.sql` — Supabase Cron cleanup for expired debate sessions, temporary rate-limit buckets, and study sessions older than seven days.
+3. `supabase/migrations/202610060003_library_details.sql` — Grade I–IV for IB/National and required typed meeting places. Existing DP/National sessions and management links are preserved. Legacy MYP sessions remain stored but are excluded from the new board; a host must choose a school grade and programme before updating one.
 
 The core migration is transactional and intended to run once on an empty project. If Cron is unavailable, enable it in Supabase Integrations and run the second migration afterward. Expired studies/lobbies are excluded from active queries immediately, independently of cleanup timing.
 
@@ -64,11 +65,11 @@ This release uses invite-only email authentication. Native biometric/WebAuthn pa
 ## Feature behavior
 
 - **Anonymous Q&A:** 280-character questions tagged to a teacher, department, or school life. Teachers see only authorized inboxes. English profanity screening flags questions for review. Teachers can mark answered, archive/restore, approve flagged text, and pin/unpin questions on boards they own. Publishing shares the submitted text; there is no private student reply channel.
-- **Library Table:** programme/year validation, subject/focus, location, school-timezone date/time, optional first name/contact, and host-managed open spots. A private link with a token in its URL fragment allows editing/cancellation. Store that link: it cannot be recovered without identifying the host. Public views omit management-token hashes. Open spots do not represent reservations.
+- **Library Table:** Grade I–IV, IB/National programmes, subject/focus, typed meeting place, school-timezone date/time, optional first name/contact, and host-managed open spots. A private link with a token in its URL fragment allows editing/cancellation. Store that link: it cannot be recovered without identifying the host. Public views omit management-token hashes. Open spots do not represent reservations.
 - **Debates:** teachers create 2–4 stances and a 1–60 minute preparation window. QR codes join an expiring lobby. Opaque HttpOnly cookies restore each participant's browser identity. Teacher rosters receive Supabase Realtime changes with a three-second polling fallback; student phones poll their own state every two seconds. The assignment RPC locks the session, verifies the roster, enforces balanced groups, and closes joining atomically. Reopening clears all assignments. Lobbies support up to 100 students and expire after 24 hours.
 - **Noise monitor:** microphone amplitude is processed locally, smoothed, and shown on a green/yellow/red relative gauge. Sensitivity and three-second quiet-room calibration are available. Audio is never connected to playback, uploaded, or recorded. Microphone tracks are released on stop/navigation. HTTPS or localhost is required; this is not a calibrated decibel measurement.
 
-Default school timezone: `Europe/Warsaw`. Change `NEXT_PUBLIC_SCHOOL_TIMEZONE` to an IANA timezone before deployment. Programme/year options are defined in `src/lib/domain.ts` and the database's `programme_grades` table; update both if your school uses different labels.
+Default school timezone: `Europe/Warsaw`. Change `NEXT_PUBLIC_SCHOOL_TIMEZONE` to an IANA timezone before deployment. Programme/grade options are defined in `src/lib/domain.ts` and the database's `programme_grades` table; update both if your school uses different labels.
 
 ## Architecture and privacy
 
