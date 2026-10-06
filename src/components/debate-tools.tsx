@@ -93,7 +93,7 @@ export function QrScanner({ onScan, onCancel }: { onScan: (code: string) => void
         const name = e instanceof Error ? e.name : "";
         if (name === "NotFoundError" || name === "OverconstrainedError") { setError("No camera was found on this device. Enter the room code instead."); return; }
         const state = await cameraPermission();
-        if (state === "denied") setError("Camera access is blocked for this site. Tap the lock (or tune) icon in the address bar, open site settings, set Camera to Allow, then tap Try again.");
+        if (state === "denied") setError("Camera is blocked. In Chrome: tap the tune icon by the address bar → Permissions → Camera → Allow. If Camera isn’t listed there: tap ⋮ → Settings → Site settings → Camera and turn it on. Then tap Try again.");
         else setError("Camera permission wasn’t granted. Tap Try again and choose Allow when your browser asks.");
         setCanRetry(true);
         return;
