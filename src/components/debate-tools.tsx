@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { ArrowRight, Minus, Plus, MessagesSquare } from "lucide-react";
 import { api } from "@/lib/api-client";
 import type { Debate } from "@/lib/domain";
+import { createBarcodeReader, type BarcodeReader } from "@/lib/qr-reader";
 import { ErrorMessage, SubmitButton } from "./ui";
 export function useDebateTimer(debate: Pick<Debate, "timer_deadline" | "timer_remaining" | "prep_seconds"> | null, serverTime?: string) {
   const [clock, setClock] = useState(() => ({ now: Date.now(), offset: 0 }));
@@ -34,13 +35,6 @@ export function DebateCreateForm() {
     <div className="form-actions"><span className="privacy-note"><MessagesSquare size={14} /> Everyone gets a place in the conversation.</span><SubmitButton pending={pending}>Open the lobby <ArrowRight size={15} /></SubmitButton></div>
   </form></section><aside className="info-panel"><MessagesSquare size={27} strokeWidth={1.5} /><h3>Different sides.<br />A shared conversation.</h3><p>Let a fair shuffle introduce a new perspective. Groups are balanced automatically, with at most one student difference.</p><div className="info-steps"><div className="info-step"><span className="info-number">01</span><div><strong>Put the QR on the board</strong><p>Students scan, enter their names, and join.</p></div></div><div className="info-step"><span className="info-number">02</span><div><strong>Shuffle the room</strong><p>One click assigns everyone a stance.</p></div></div><div className="info-step"><span className="info-number">03</span><div><strong>Take a moment to prepare</strong><p>Start the timer, then let the real conversation begin.</p></div></div></div><div className="info-panel-foot">Lobbies close to new arrivals after assignment. Reopening clears the assignments so you can shuffle everyone again.</div></aside></div>;
 }
-type DetectedBarcode = { rawValue: string };
-type BarcodeReader = { detect: (source: HTMLVideoElement) => Promise<DetectedBarcode[]> };
-function barcodeReader(): BarcodeReader | null {
-  const Ctor = (window as unknown as { BarcodeDetector?: new (options: { formats: string[] }) => BarcodeReader }).BarcodeDetector;
-  if (!Ctor) return null;
-  try { return new Ctor({ formats: ["qr_code"] }); } catch { return null; }
-}
 export function extractDebateCode(text: string): string | null {
   const match = text.match(/\/debate\/join\/([A-Za-z0-9]{6})/i);
   const code = (match ? match[1] : text.trim()).toUpperCase();
@@ -58,19 +52,21 @@ export function QrScanner({ onScan, onCancel }: { onScan: (code: string) => void
     let raf = 0;
     let stopped = false;
     let finished = false;
-    const maybeReader = barcodeReader();
-    if (!maybeReader) { setError("This browser can’t scan inside the page. Open your phone’s camera app, point it at the QR, and tap the link — or enter the code below."); return; }
-    const reader: BarcodeReader = maybeReader;
+    let reader: BarcodeReader | null = null;
+    let lastScan = 0;
+    const stopCamera = () => { stream?.getTracks().forEach(track => track.stop()); };
     async function tick() {
       if (stopped || finished) return;
       const video = videoRef.current;
-      if (video && video.readyState >= 2) {
+      if (reader && video && video.readyState >= 2 && performance.now() - lastScan >= 150) {
         try {
+          lastScan = performance.now();
           const codes = await reader.detect(video);
+          if (stopped || finished) return;
           const text = codes.length ? codes[0].rawValue : "";
           if (text && !finished) {
             const code = extractDebateCode(text);
-            if (code) { finished = true; onScan(code); return; }
+            if (code) { finished = true; stopCamera(); onScan(code); return; }
             setHint("That QR isn’t a debate room. Point at your teacher’s code.");
           }
         } catch { /* keep scanning */ }
@@ -87,20 +83,26 @@ export function QrScanner({ onScan, onCancel }: { onScan: (code: string) => void
     async function diagnose(state: string) {
       const secure = typeof window !== "undefined" && window.isSecureContext;
       const hasApi = !!navigator.mediaDevices?.getUserMedia;
-      let hasScanner = false;
-      try { hasScanner = !!barcodeReader(); } catch { hasScanner = false; }
+      const hasScanner = !!reader;
       setDetails(`Details for troubleshooting — secure: ${secure ? "yes" : "no"} · camera api: ${hasApi ? "yes" : "no"} · scanner: ${hasScanner ? "yes" : "no"} · permission: ${state}`);
     }
     async function start() {
       if (typeof window !== "undefined" && window.isSecureContext === false) { setError("The camera only works over a secure connection. Open your school’s https address on your phone (not a plain http or local-network preview link) and try again."); return; }
       if (!navigator.mediaDevices?.getUserMedia) { setError("This browser can’t open the camera here. Use your school’s https address in Chrome (or your phone’s camera app) — or enter the room code instead."); return; }
+      const policyDocument = document as Document & { permissionsPolicy?: { allowsFeature: (name: string) => boolean }; featurePolicy?: { allowsFeature: (name: string) => boolean } };
+      const policy = policyDocument.permissionsPolicy || policyDocument.featurePolicy;
+      if (policy && !policy.allowsFeature("camera")) { setError("This page’s security policy blocks the camera. Reload after your school’s site has been updated."); setCanRetry(true); return; }
       setError(null); setCanRetry(false);
       try {
-        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false });
+        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" } }, audio: false });
+        if (stopped) { stopCamera(); return; }
       } catch (e) {
         const name = e instanceof Error ? e.name : "";
         if (name === "NotFoundError" || name === "OverconstrainedError") { setError("No camera was found on this device. Enter the room code instead."); return; }
+        if (stopped) return;
+        if (name === "NotReadableError") { setError("The camera could not start. Close other apps using it, then try again."); setCanRetry(true); return; }
         const state = await cameraPermission();
+        if (stopped) return;
         if (state === "denied") setError("Camera is blocked. In Chrome: tune icon by the address bar → Permissions → Camera → Allow. If Camera isn’t listed: ⋮ → Settings → Site settings → Camera → on. Still nothing? Open Android Settings → Apps → Chrome → Permissions → Camera → Allow. Then tap Try again.");
         else setError("Camera permission wasn’t granted. Tap Try again and choose Allow when your browser asks.");
         setCanRetry(true);
@@ -108,13 +110,17 @@ export function QrScanner({ onScan, onCancel }: { onScan: (code: string) => void
         return;
       }
       const video = videoRef.current;
-      if (!video) return;
+      if (!video) { stopCamera(); return; }
       video.srcObject = stream;
-      try { await video.play(); } catch { setError("Camera preview couldn’t start. Enter the room code instead."); return; }
+      try {
+        await video.play();
+        reader = await createBarcodeReader();
+      } catch { stopCamera(); if (!stopped) { setError("Camera preview or QR scanner could not start. Try again, or enter the room code instead."); setCanRetry(true); } return; }
+      if (stopped) { stopCamera(); return; }
       raf = requestAnimationFrame(() => { void tick(); });
     }
     void start();
-    return () => { stopped = true; cancelAnimationFrame(raf); stream?.getTracks().forEach(t => t.stop()); };
+    return () => { stopped = true; cancelAnimationFrame(raf); stopCamera(); };
   }, [onScan, attempt]);
   const retry = () => { setError(null); setDetails(null); setCanRetry(false); setHint(null); setAttempt(a => a + 1); };
   return <div className="qr-scanner"><div className="qr-viewfinder"><video ref={videoRef} playsInline muted aria-label="Camera preview for QR scanning" /><span className="qr-frame" aria-hidden="true" /></div><ErrorMessage message={error} />{details && <p className="field-help" style={{ margin: 0 }}>{details}</p>}{!error && <p className="field-help" style={{ margin: 0 }}>{hint || "Point your camera at the QR on your teacher’s screen."}</p>}<div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>{canRetry && <button className="button secondary small" type="button" onClick={retry}>Try again</button>}<button className="button ghost small" type="button" onClick={onCancel}>Enter code instead</button></div></div>;
