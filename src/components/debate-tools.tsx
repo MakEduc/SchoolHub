@@ -55,8 +55,9 @@ export function QrScanner({ onScan, onCancel }: { onScan: (code: string) => void
     let raf = 0;
     let stopped = false;
     let finished = false;
-    const reader = barcodeReader();
-    if (!reader) { setError("This browser can’t scan inside the page. Open your phone’s camera app, point it at the QR, and tap the link — or enter the code below."); return; }
+    const maybeReader = barcodeReader();
+    if (!maybeReader) { setError("This browser can’t scan inside the page. Open your phone’s camera app, point it at the QR, and tap the link — or enter the code below."); return; }
+    const reader: BarcodeReader = maybeReader;
     async function tick() {
       if (stopped || finished) return;
       const video = videoRef.current;
