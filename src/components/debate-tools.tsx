@@ -84,7 +84,8 @@ export function QrScanner({ onScan, onCancel }: { onScan: (code: string) => void
       } catch { return "unknown"; }
     }
     async function start() {
-      if (!navigator.mediaDevices?.getUserMedia) { setError("This device can’t open the camera. Enter the room code instead."); return; }
+      if (typeof window !== "undefined" && window.isSecureContext === false) { setError("The camera only works over a secure connection. Open your school’s https address on your phone (not a plain http or local-network preview link) and try again."); return; }
+      if (!navigator.mediaDevices?.getUserMedia) { setError("This browser can’t open the camera here. Use your school’s https address in Chrome (or your phone’s camera app) — or enter the room code instead."); return; }
       setError(null); setCanRetry(false);
       try {
         stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false });
