@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowRight, GraduationCap, LockKeyhole } from "lucide-react";
 import { browserSupabase } from "@/lib/supabase/browser";
+import { signInErrorMessage } from "@/lib/auth-errors";
 import { ErrorMessage, SubmitButton } from "@/components/ui";
 export default function LoginPage() {
   const router = useRouter(); const [email, setEmail] = useState(""), [code, setCode] = useState(""), [sent, setSent] = useState(false), [pending, setPending] = useState(false), [error, setError] = useState<string | null>(null);
@@ -10,11 +11,11 @@ export default function LoginPage() {
     e.preventDefault(); setPending(true); setError(null);
     try {
       if (!sent) {
-        const result = await browserSupabase().auth.signInWithOtp({ email, options: { shouldCreateUser: false, emailRedirectTo: `${window.location.origin}/auth/callback` } });
-        if (result.error) throw new Error("We couldn’t send a sign-in link. Check your invited school email and try again.");
+        const result = await browserSupabase().auth.signInWithOtp({ email: email.trim(), options: { shouldCreateUser: false, emailRedirectTo: `${window.location.origin}/auth/callback` } });
+        if (result.error) throw new Error(signInErrorMessage(result.error));
         setSent(true);
       } else {
-        const result = await browserSupabase().auth.verifyOtp({ email, token: code, type: "email" });
+        const result = await browserSupabase().auth.verifyOtp({ email: email.trim(), token: code.trim(), type: "email" });
         if (result.error) throw new Error("That code is invalid or has expired. Please try again.");
         router.push("/teacher"); router.refresh();
       }
