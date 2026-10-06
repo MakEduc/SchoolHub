@@ -50,6 +50,7 @@ export function QrScanner({ onScan, onCancel }: { onScan: (code: string) => void
   const videoRef = useRef<HTMLVideoElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [hint, setHint] = useState<string | null>(null);
+  const [details, setDetails] = useState<string | null>(null);
   const [canRetry, setCanRetry] = useState(false);
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
@@ -83,6 +84,13 @@ export function QrScanner({ onScan, onCancel }: { onScan: (code: string) => void
         return (await permissions.query({ name: "camera" })).state;
       } catch { return "unknown"; }
     }
+    async function diagnose(state: string) {
+      const secure = typeof window !== "undefined" && window.isSecureContext;
+      const hasApi = !!navigator.mediaDevices?.getUserMedia;
+      let hasScanner = false;
+      try { hasScanner = !!barcodeReader(); } catch { hasScanner = false; }
+      setDetails(`Details for troubleshooting — secure: ${secure ? "yes" : "no"} · camera api: ${hasApi ? "yes" : "no"} · scanner: ${hasScanner ? "yes" : "no"} · permission: ${state}`);
+    }
     async function start() {
       if (typeof window !== "undefined" && window.isSecureContext === false) { setError("The camera only works over a secure connection. Open your school’s https address on your phone (not a plain http or local-network preview link) and try again."); return; }
       if (!navigator.mediaDevices?.getUserMedia) { setError("This browser can’t open the camera here. Use your school’s https address in Chrome (or your phone’s camera app) — or enter the room code instead."); return; }
@@ -93,9 +101,10 @@ export function QrScanner({ onScan, onCancel }: { onScan: (code: string) => void
         const name = e instanceof Error ? e.name : "";
         if (name === "NotFoundError" || name === "OverconstrainedError") { setError("No camera was found on this device. Enter the room code instead."); return; }
         const state = await cameraPermission();
-        if (state === "denied") setError("Camera is blocked. In Chrome: tap the tune icon by the address bar → Permissions → Camera → Allow. If Camera isn’t listed there: tap ⋮ → Settings → Site settings → Camera and turn it on. Then tap Try again.");
+        if (state === "denied") setError("Camera is blocked. In Chrome: tune icon by the address bar → Permissions → Camera → Allow. If Camera isn’t listed: ⋮ → Settings → Site settings → Camera → on. Still nothing? Open Android Settings → Apps → Chrome → Permissions → Camera → Allow. Then tap Try again.");
         else setError("Camera permission wasn’t granted. Tap Try again and choose Allow when your browser asks.");
         setCanRetry(true);
+        void diagnose(state);
         return;
       }
       const video = videoRef.current;
@@ -107,6 +116,6 @@ export function QrScanner({ onScan, onCancel }: { onScan: (code: string) => void
     void start();
     return () => { stopped = true; cancelAnimationFrame(raf); stream?.getTracks().forEach(t => t.stop()); };
   }, [onScan, attempt]);
-  const retry = () => { setError(null); setCanRetry(false); setHint(null); setAttempt(a => a + 1); };
-  return <div className="qr-scanner"><div className="qr-viewfinder"><video ref={videoRef} playsInline muted aria-label="Camera preview for QR scanning" /><span className="qr-frame" aria-hidden="true" /></div><ErrorMessage message={error} />{!error && <p className="field-help" style={{ margin: 0 }}>{hint || "Point your camera at the QR on your teacher’s screen."}</p>}<div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>{canRetry && <button className="button secondary small" type="button" onClick={retry}>Try again</button>}<button className="button ghost small" type="button" onClick={onCancel}>Enter code instead</button></div></div>;
+  const retry = () => { setError(null); setDetails(null); setCanRetry(false); setHint(null); setAttempt(a => a + 1); };
+  return <div className="qr-scanner"><div className="qr-viewfinder"><video ref={videoRef} playsInline muted aria-label="Camera preview for QR scanning" /><span className="qr-frame" aria-hidden="true" /></div><ErrorMessage message={error} />{details && <p className="field-help" style={{ margin: 0 }}>{details}</p>}{!error && <p className="field-help" style={{ margin: 0 }}>{hint || "Point your camera at the QR on your teacher’s screen."}</p>}<div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>{canRetry && <button className="button secondary small" type="button" onClick={retry}>Try again</button>}<button className="button ghost small" type="button" onClick={onCancel}>Enter code instead</button></div></div>;
 }
