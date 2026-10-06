@@ -6,6 +6,7 @@ export type Programme = typeof PROGRAMMES[number];
 export const GRADES = ["Grade I", "Grade II", "Grade III", "Grade IV"] as const;
 export const questionSchema = z.object({
   body: z.string().trim().min(3, "Write at least 3 characters.").max(280, "Keep your question within 280 characters."),
+  visibility: z.enum(["private", "public"]).default("private"),
   recipientType: z.enum(["teacher", "department", "general"]),
   recipientId: z.uuid().nullable(),
   website: z.string().max(0, "Submission rejected.").optional(),
@@ -80,6 +81,7 @@ export interface StudySession {
 export interface Question {
   id: string; body: string; recipient_type: string; teacher_id: string | null; department_id: string | null;
   status: "new" | "answered" | "archived"; moderation_status: "approved" | "flagged";
+  visibility: "private" | "public"; answer: string | null; answered_at: string | null;
   created_at: string; department?: { name: string } | null;
 }
 export interface Stance { id: string; label: string; position: number }

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 const base = process.argv[2] || "http://localhost:3000";
-for (const path of ["/", "/ask", "/library", "/library/new", "/debate", "/noise", "/login"]) {
+for (const path of ["/", "/ask", "/library", "/library/new", "/debate", "/noise", "/login", "/terms", "/privacy", "/question/20000000-0000-4000-8000-000000000001"]) {
   const response = await fetch(`${base}${path}`);
   assert.equal(response.status, 200, `${path} should render`);
   assert.ok((await response.text()).includes("SchoolHub"));

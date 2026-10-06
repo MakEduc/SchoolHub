@@ -22,6 +22,10 @@ export async function GET(request: NextRequest, context: Context) {
       results.forEach(r => dbError(r.error));
       return json({ departments: results[0].data, subjects: results[1].data, locations: results[2].data, teachers: results[3].data });
     }
+    if (route === "questions") {
+      const result = await pub.from("public_questions").select("*").order("created_at", { ascending: false }).limit(200);
+      dbError(result.error); return json(result.data);
+    }
     if (route === "studies") {
       const result = await pub.from("active_study_sessions").select("*").in("programme", ["IB", "National"]).order("starts_at").limit(200);
       dbError(result.error); return json(result.data);
@@ -34,13 +38,13 @@ export async function GET(request: NextRequest, context: Context) {
       const { db, profile } = await staff();
       const board = await db.from("public_boards").select("id,title,slug").eq("id", uuid.parse(path[2])).eq("owner_id", profile.id).maybeSingle();
       dbError(board.error); if (!board.data) throw new ApiError("Board unavailable.", 404);
-      const questions = await pub.from("published_questions").select("id,body,status,published_at").eq("slug", board.data.slug).order("published_at", { ascending: false });
+      const questions = await pub.from("published_questions").select("id,body,status,published_at,answer,answered_at").eq("slug", board.data.slug).order("published_at", { ascending: false });
       dbError(questions.error); return json({ ...board.data, questions: questions.data });
     }
     if (path[0] === "board" && path.length === 2) {
       const board = await pub.from("public_boards").select("title,slug").eq("slug", path[1]).maybeSingle();
       dbError(board.error); if (!board.data) throw new ApiError("Board not found.", 404);
-      const items = await pub.from("published_questions").select("id,body,status,published_at").eq("slug", path[1]).order("published_at", { ascending: false });
+      const items = await pub.from("published_questions").select("id,body,status,published_at,answer,answered_at").eq("slug", path[1]).order("published_at", { ascending: false });
       dbError(items.error); return json({ ...board.data, questions: items.data });
     }
     if (route === "teacher") {
@@ -106,11 +110,19 @@ export async function POST(request: NextRequest, context: Context) {
         const teacher = await admin.from("teacher_profiles").select("id").eq("id", data.recipientId!).eq("active", true).maybeSingle();
         dbError(teacher.error); if (!teacher.data) throw new ApiError("Choose an available teacher.");
       }
-      const result = await admin.from("questions").insert({ body: data.body, recipient_type: data.recipientType,
+      const receiptToken = token();
+      const result = await admin.from("questions").insert({ visibility: data.visibility, receipt_token_hash: hash(receiptToken), body: data.body, recipient_type: data.recipientType,
         teacher_id: data.recipientType === "teacher" ? data.recipientId : null,
         department_id: data.recipientType === "department" ? data.recipientId : null,
         moderation_status: isFlagged(data.body) ? "flagged" : "approved",
-      }); dbError(result.error); return json({ success: true }, 201);
+      }).select("id").single(); dbError(result.error); return json({ id: result.data!.id, receiptToken }, 201);
+    }
+    if (route === "questions/read") {
+      const input = z.object({ id: uuid, token: z.string().regex(/^[a-f0-9]{64}$/) }).parse(body);
+      const result = await admin.from("questions").select("id,body,visibility,status,answer,created_at,answered_at")
+        .eq("id", input.id).eq("receipt_token_hash", hash(input.token)).maybeSingle();
+      dbError(result.error); if (!result.data) throw new ApiError("This private receipt is unavailable.", 404);
+      return json(result.data);
     }
     if (route === "studies") {
       const data = studySchema.parse(body);
@@ -192,6 +204,13 @@ export async function POST(request: NextRequest, context: Context) {
       if (result.error) { await admin.auth.admin.deleteUser(invitation.data.user.id); dbError(result.error); }
       dbError((await admin.from("staff_actions").insert({ staff_id: profile.id, action: "teacher.invited", target_id: invitation.data.user.id })).error);
       return json({ success: true }, 201);
+    }
+    if (route === "questions/answer") {
+      const data = z.object({ id: uuid, answer: z.string().trim().min(1).max(2000) }).parse(body);
+      if (isFlagged(data.answer)) throw new ApiError("Please use a classroom-appropriate answer.");
+      const result = await admin.rpc("answer_question", { p_staff: profile.id, p_question: data.id, p_answer: data.answer });
+      if (result.error?.code === "P0001") throw new ApiError(result.error.message, result.error.message === "Question unavailable" ? 403 : 400);
+      dbError(result.error); return json({ success: true });
     }
     if (route === "questions/action") {
       const data = z.object({ id: uuid, action: z.enum(["answer", "archive", "restore", "approve", "pin", "unpin"]), boardId: uuid.optional() }).parse(body);
