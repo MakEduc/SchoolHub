@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { z } from "zod";
 import { adminSupabase, userSupabase } from "./supabase/server";
+import { isAllowedRequestOrigin } from "./request-origin";
 
 export class ApiError extends Error { constructor(message: string, public status = 400) { super(message); } }
 export function dbError(error: { code?: string; message: string } | null) {
@@ -15,8 +16,9 @@ export function dbError(error: { code?: string; message: string } | null) {
 }
 export async function readBody(request: NextRequest): Promise<unknown> {
   const origin = request.headers.get("origin");
-  const allowed = new Set([new URL(request.url).origin, process.env.NEXT_PUBLIC_SITE_URL].filter(Boolean));
-  if (origin && !allowed.has(origin)) throw new ApiError("Request origin is not allowed.", 403);
+  if (!isAllowedRequestOrigin(origin, request.url, request.headers.get("host"), process.env.NEXT_PUBLIC_SITE_URL)) {
+    throw new ApiError("Request origin is not allowed.", 403);
+  }
   if (Number(request.headers.get("content-length") || "0") > 16384) throw new ApiError("Request is too large.", 413);
   const text = await request.text();
   if (text.length > 16384) throw new ApiError("Request is too large.", 413);
