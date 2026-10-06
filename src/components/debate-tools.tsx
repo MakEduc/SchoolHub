@@ -50,6 +50,8 @@ export function QrScanner({ onScan, onCancel }: { onScan: (code: string) => void
   const videoRef = useRef<HTMLVideoElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [hint, setHint] = useState<string | null>(null);
+  const [canRetry, setCanRetry] = useState(false);
+  const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     let stream: MediaStream | null = null;
     let raf = 0;
@@ -74,11 +76,27 @@ export function QrScanner({ onScan, onCancel }: { onScan: (code: string) => void
       }
       if (!stopped && !finished) raf = requestAnimationFrame(() => { void tick(); });
     }
+    async function cameraPermission(): Promise<string> {
+      try {
+        const permissions = (navigator as unknown as { permissions?: { query: (options: { name: string }) => Promise<{ state: string }> } }).permissions;
+        if (!permissions) return "unknown";
+        return (await permissions.query({ name: "camera" })).state;
+      } catch { return "unknown"; }
+    }
     async function start() {
       if (!navigator.mediaDevices?.getUserMedia) { setError("This device can’t open the camera. Enter the room code instead."); return; }
+      setError(null); setCanRetry(false);
       try {
         stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false });
-      } catch { setError("Camera is blocked. Allow camera access, or enter the room code instead."); return; }
+      } catch (e) {
+        const name = e instanceof Error ? e.name : "";
+        if (name === "NotFoundError" || name === "OverconstrainedError") { setError("No camera was found on this device. Enter the room code instead."); return; }
+        const state = await cameraPermission();
+        if (state === "denied") setError("Camera access is blocked for this site. Tap the lock (or tune) icon in the address bar, open site settings, set Camera to Allow, then tap Try again.");
+        else setError("Camera permission wasn’t granted. Tap Try again and choose Allow when your browser asks.");
+        setCanRetry(true);
+        return;
+      }
       const video = videoRef.current;
       if (!video) return;
       video.srcObject = stream;
@@ -87,6 +105,7 @@ export function QrScanner({ onScan, onCancel }: { onScan: (code: string) => void
     }
     void start();
     return () => { stopped = true; cancelAnimationFrame(raf); stream?.getTracks().forEach(t => t.stop()); };
-  }, [onScan]);
-  return <div className="qr-scanner"><div className="qr-viewfinder"><video ref={videoRef} playsInline muted aria-label="Camera preview for QR scanning" /><span className="qr-frame" aria-hidden="true" /></div><ErrorMessage message={error} />{!error && <p className="field-help" style={{ margin: 0 }}>{hint || "Point your camera at the QR on your teacher’s screen."}</p>}<button className="button ghost small" type="button" onClick={onCancel}>Enter code instead</button></div>;
+  }, [onScan, attempt]);
+  const retry = () => { setError(null); setCanRetry(false); setHint(null); setAttempt(a => a + 1); };
+  return <div className="qr-scanner"><div className="qr-viewfinder"><video ref={videoRef} playsInline muted aria-label="Camera preview for QR scanning" /><span className="qr-frame" aria-hidden="true" /></div><ErrorMessage message={error} />{!error && <p className="field-help" style={{ margin: 0 }}>{hint || "Point your camera at the QR on your teacher’s screen."}</p>}<div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>{canRetry && <button className="button secondary small" type="button" onClick={retry}>Try again</button>}<button className="button ghost small" type="button" onClick={onCancel}>Enter code instead</button></div></div>;
 }
