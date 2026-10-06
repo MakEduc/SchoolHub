@@ -30,6 +30,13 @@ export async function GET(request: NextRequest, context: Context) {
       const result = await pub.from("public_boards").select("id,slug,title").order("title");
       dbError(result.error); return json(result.data);
     }
+    if (path[0] === "teacher" && path[1] === "boards" && path.length === 3) {
+      const { db, profile } = await staff();
+      const board = await db.from("public_boards").select("id,title,slug").eq("id", uuid.parse(path[2])).eq("owner_id", profile.id).maybeSingle();
+      dbError(board.error); if (!board.data) throw new ApiError("Board unavailable.", 404);
+      const questions = await pub.from("published_questions").select("id,body,status,published_at").eq("slug", board.data.slug).order("published_at", { ascending: false });
+      dbError(questions.error); return json({ ...board.data, questions: questions.data });
+    }
     if (path[0] === "board" && path.length === 2) {
       const board = await pub.from("public_boards").select("title,slug").eq("slug", path[1]).maybeSingle();
       dbError(board.error); if (!board.data) throw new ApiError("Board not found.", 404);
@@ -162,6 +169,20 @@ export async function POST(request: NextRequest, context: Context) {
       return response;
     }
     const { db, profile } = await staff();
+    if (route === "boards/manage") {
+      const input = z.object({ id: uuid, action: z.enum(["update", "unpin"]), title: z.string().trim().min(3).max(80).optional(), questionId: uuid.optional() }).parse(body);
+      const owned = await db.from("public_boards").select("id").eq("id", input.id).eq("owner_id", profile.id).maybeSingle();
+      dbError(owned.error); if (!owned.data) throw new ApiError("Board unavailable.", 403);
+      if (input.action === "update") {
+        if (!input.title) throw new ApiError("Enter a board title.");
+        const result = await admin.from("public_boards").update({ title: input.title }).eq("id", input.id).eq("owner_id", profile.id).select("id").maybeSingle();
+        dbError(result.error); if (!result.data) throw new ApiError("Board unavailable.", 403);
+      } else {
+        if (!input.questionId) throw new ApiError("Choose a pinned question.");
+        dbError((await admin.from("board_questions").delete().eq("board_id", input.id).eq("question_id", input.questionId)).error);
+      }
+      return json({ success: true });
+    }
     if (route === "admin/invite") {
       if (profile.role !== "admin") throw new ApiError("Administrator access required.", 403);
       const data = z.object({ name: z.string().trim().min(1).max(80), email: z.email() }).parse(body);

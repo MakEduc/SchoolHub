@@ -97,3 +97,7 @@ With a server running, `npm run smoke -- http://localhost:3100` checks public pa
 Import this repository into Vercel, set the variables from `.env.example`, and deploy. Set `NEXT_PUBLIC_SITE_URL` to the production HTTPS URL. Apply migrations to the production Supabase project and configure the production auth URLs/email templates. Use a separate Supabase project for preview deployments.
 
 Before a school pilot, test sign-in/invitations with the actual email provider, question visibility with two teachers from different departments, QR joining from real phones, and microphone behavior on the classroom projector browser.
+
+## Class boards
+
+Students open **Class boards** (`/boards`) in the main navigation or use a teacher’s `/board/<slug>` link. No student account is required. Teachers create boards in their workspace, select a board in their inbox, and pin approved questions to publish them. **Edit board** opens `/teacher/boards/<id>` to rename the board, remove pinned questions, and copy the student link. Renaming preserves existing shared links. Removing a question only removes that board’s publication; the original question stays in the teacher inbox. Answers remain in person, with the Mark answered action recording their status.

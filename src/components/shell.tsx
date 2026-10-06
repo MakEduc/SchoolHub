@@ -9,6 +9,7 @@ import { SCHOOL_TIMEZONE } from "@/lib/domain";
 const links = [
   { href: "/", label: "Overview", icon: Home },
   { href: "/ask", label: "Anonymous Q&A", icon: MessageCircle },
+  { href: "/boards", label: "Class boards", icon: BookOpen },
   { href: "/library", label: "Library Table", icon: Library },
   { href: "/debate", label: "Debate Room", icon: MessagesSquare },
   { href: "/noise", label: "Noise Monitor", icon: AudioLines },
