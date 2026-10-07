@@ -1,10 +1,11 @@
 import { cookies } from "next/headers";
-import { requireSchool, schoolAccess, sendSchoolCode, SCHOOL_COOKIE, CHALLENGE_COOKIE, schoolCookieOptions } from "@/lib/school-access";
-import { schoolEmailDomain, verificationHash } from "@/lib/school-verification";
+import { requireSchool, schoolAccess, SCHOOL_COOKIE, CHALLENGE_COOKIE } from "@/lib/school-access";
+import { schoolEmailDomain } from "@/lib/school-verification";
 import { NextRequest } from "next/server";
 import { z } from "zod";
-import { randomBytes, randomInt } from "node:crypto";
-import { adminSupabase } from "@/lib/supabase/server";
+import { randomBytes } from "node:crypto";
+import { signInErrorMessage } from "@/lib/auth-errors";
+import { adminSupabase, userSupabase } from "@/lib/supabase/server";
 import { balancedAssignments, debateSchema, questionSchema, studySchema, type Participant, type Stance } from "@/lib/domain";
 import { ApiError, dbError, failure, hash, isFlagged, json, rateLimit, readBody, staff, token, uuid } from "@/lib/server-utils";
 
@@ -21,29 +22,21 @@ async function schoolPost(request: NextRequest, route: string, body: unknown) {
     const school = await db.from("school_domains").select("school_id,school:schools!inner(active)").eq("domain", domain || "").eq("school.active", true).maybeSingle();
     dbError(school.error);
     if (!school.data) throw new ApiError("Use an email from a participating school.");
-    const challenge = token(), code = String(randomInt(100000, 1000000));
-    const old = store.get(CHALLENGE_COOKIE)?.value;
-    if (old) dbError((await db.from("school_challenges").delete().eq("id", old)).error);
-    dbError((await db.from("school_challenges").delete().lt("expires_at", new Date().toISOString())).error);
-    dbError((await db.from("school_sessions").delete().lt("expires_at", new Date().toISOString())).error);
-    dbError((await db.from("school_challenges").insert({ id: challenge, school_id: school.data.school_id, code_hash: verificationHash(challenge, code, process.env.SUPABASE_SECRET_KEY!) })).error);
-    try { await sendSchoolCode(input.email.trim().toLowerCase(), code, input.language); }
-    catch (error) { await db.from("school_challenges").delete().eq("id", challenge); throw error; }
-    store.set(CHALLENGE_COOKIE, challenge, { ...schoolCookieOptions, maxAge: 600 });
+    const auth = await userSupabase();
+    const result = await auth.auth.signInWithOtp({ email: input.email.trim().toLowerCase(), options: { shouldCreateUser: true, emailRedirectTo: new URL("/auth/callback", request.nextUrl.origin).toString() } });
+    if (result.error) throw new ApiError(signInErrorMessage(result.error, "student"), result.error.status === 429 ? 429 : 400);
     return json({ success: true });
   }
   if (route === "school/verify-code") {
-    const { code } = z.object({ code: z.string().regex(/^\d{6}$/) }).parse(body);
-    const challenge = store.get(CHALLENGE_COOKIE)?.value;
-    if (!challenge || !/^[a-f0-9]{64}$/.test(challenge)) throw new ApiError("Request a new verification code.");
-    const session = token();
-    const result = await db.rpc("verify_school_code", { p_challenge: challenge, p_code_hash: verificationHash(challenge, code, process.env.SUPABASE_SECRET_KEY!), p_session_hash: hash(session) });
-    dbError(result.error);
-    if (!result.data) throw new ApiError("Invalid or expired code. Request a new code after five attempts.");
-    const previous = store.get(SCHOOL_COOKIE)?.value;
-    if (previous) await db.from("school_sessions").delete().eq("token_hash", hash(previous));
-    store.set(SCHOOL_COOKIE, session, { ...schoolCookieOptions, maxAge: 7 * 86400 });
-    store.delete(CHALLENGE_COOKIE);
+    const input = z.object({ email: z.email().max(254), code: z.string().regex(/^\d{6,8}$/) }).parse(body);
+    await rateLimit(request, "school-verify", 10, 600);
+    const school = await db.from("school_domains").select("school_id,school:schools!inner(active)").eq("domain", schoolEmailDomain(input.email) || "").eq("school.active", true).maybeSingle();
+    dbError(school.error);
+    if (!school.data) throw new ApiError("Use an email from a participating school.");
+    const auth = await userSupabase();
+    const result = await auth.auth.verifyOtp({ email: input.email.trim().toLowerCase(), token: input.code, type: "email" });
+    if (result.error || !result.data.user?.email_confirmed_at) throw new ApiError("That code is invalid or has expired. Please try again.");
+    if (!await schoolAccess()) { await auth.auth.signOut(); throw new ApiError("Your school access is unavailable.", 403); }
     return json({ success: true });
   }
   if (route === "school/leave") {
@@ -51,6 +44,7 @@ async function schoolPost(request: NextRequest, route: string, body: unknown) {
     if (session) dbError((await db.from("school_sessions").delete().eq("token_hash", hash(session))).error);
     if (challenge) dbError((await db.from("school_challenges").delete().eq("id", challenge)).error);
     store.delete(SCHOOL_COOKIE); store.delete(CHALLENGE_COOKIE);
+    const auth = await userSupabase(); await auth.auth.signOut();
     return json({ success: true });
   }
   throw new ApiError("Not found.", 404);

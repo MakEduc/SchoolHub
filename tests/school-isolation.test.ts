@@ -47,6 +47,15 @@ test("school isolation migration blocks cross-school access and verifies single-
     assert.equal((await db.query("select * from questions")).rows.length, 0, "changing an Auth email cannot retain the old school's access");
     await db.exec("reset role");
     await db.query("update auth.users set email='admin@2gimnazija.edu.ba' where id=$1", [admin]);
+    const student = "20000000-0000-4000-8000-000000000005";
+    await db.query("insert into auth.users(id,email) values($1,'student@2gimnazija.edu.ba')", [student]);
+    await db.query("select set_config('request.jwt.claim.sub',$1,false)", [student]);
+    await db.exec("set role authenticated");
+    assert.equal((await db.query("select * from questions")).rows.length, 0, "student Auth accounts cannot bypass anonymous API projections");
+    assert.equal((await db.query("select * from teacher_profiles")).rows.length, 0);
+    await assert.rejects(db.query("insert into teacher_profiles(id,display_name,role,school_id) values(auth.uid(),'Forged','admin','30000000-0000-4000-8000-000000000001')"), /permission denied/);
+    await assert.rejects(db.query("select answer_question(auth.uid(),'20000000-0000-4000-8000-000000000006','Forged answer')"), /permission denied/);
+    await db.exec("reset role");
     const challenge = "a".repeat(64), session = "b".repeat(64);
     await db.query("insert into school_challenges(id,school_id,code_hash) values($1,$2,'correct')", [challenge,school]);
     for (let i=0;i<5;i++) assert.equal((await db.query<{result:string|null}>("select verify_school_code($1,'wrong',$2) result", [challenge,session])).rows[0].result, null);
