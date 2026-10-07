@@ -9,7 +9,7 @@ import { isAllowedRequestOrigin } from "./request-origin";
 export class ApiError extends Error { constructor(message: string, public status = 400) { super(message); } }
 export function dbError(error: { code?: string; message: string } | null) {
   if (!error) return;
-  if (["PGRST205", "PGRST202", "42P01"].includes(error.code || "")) throw new ApiError("Your school's tools are being connected. Please try again shortly.", 503);
+  if (["PGRST205", "PGRST202", "42P01", "42703", "PGRST204"].includes(error.code || "")) throw new ApiError("School setup is incomplete. Ask your administrator to apply the latest database migrations.", 503);
   if (error.code === "23503") throw new ApiError("That selection is no longer available. Refresh and choose again.");
   if (error.code === "23505") throw new ApiError("This already exists. Try a different name or reload.", 409);
   throw new ApiError("The request could not be completed. Please try again.", 500);

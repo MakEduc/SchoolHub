@@ -1,5 +1,8 @@
 // English source strings keep the catalogue readable.
 export const bosnian: Record<string, string> = {
+  "School setup is incomplete. Ask your administrator to apply the latest database migrations.": "Postavljanje škole nije završeno. Zamolite administratora da primijeni najnovije migracije baze podataka.",
+  "This deployment is missing the school verification API. Deploy the latest SchoolHub version.": "Ova instalacija nema API za potvrdu škole. Objavite najnoviju verziju SchoolHuba.",
+  "Could not reach SchoolHub. Check your connection and try again.": "Nije moguće pristupiti SchoolHubu. Provjerite vezu i pokušajte ponovo.",
   "This link requires verified access to the same school. Keep it private. Use Check for an answer to refresh it.": "Ovaj link zahtijeva potvrđen pristup istoj školi. Čuvajte ga. Koristite Provjeri odgovor za osvježavanje.",
   "Overview": "Pregled",
   "Anonymous Q&A": "Anonimna pitanja",
