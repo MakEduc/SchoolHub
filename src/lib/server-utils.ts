@@ -27,13 +27,15 @@ export async function readBody(request: NextRequest): Promise<unknown> {
 export async function staff() {
   const db = await userSupabase();
   const { data: { user }, error } = await db.auth.getUser();
-  if (error || !user) throw new ApiError("Please sign in as a teacher.", 401);
-  const result = await db.from("teacher_profiles").select("id,display_name,role,handles_general").eq("id", user.id).eq("active", true).maybeSingle();
+  if (error || !user?.email_confirmed_at) throw new ApiError("Please sign in as a teacher.", 401);
+  const result = await db.from("teacher_profiles").select("id,display_name,role,handles_general,school_id").eq("id", user.id).eq("active", true).maybeSingle();
   dbError(result.error);
   if (!result.data) throw new ApiError("Your account does not have teacher access.", 403);
-  return { db, user, profile: result.data as { id: string; display_name: string; role: string; handles_general: boolean } };
+  const domain = await adminSupabase().from("school_domains").select("school_id,school:schools!inner(active)").eq("domain", user.email!.split("@")[1].toLowerCase()).eq("school_id", result.data.school_id).eq("school.active", true).maybeSingle();
+  dbError(domain.error); if (!domain.data) throw new ApiError("Your account does not have school access.", 403);
+  return { db, user, profile: result.data as { id: string; display_name: string; role: string; handles_general: boolean; school_id: string } };
 }
-export async function rateLimit(request: NextRequest, action: string, max = 8, seconds = 600) {
+export async function rateLimit(request: NextRequest, action: string, max = 8, seconds = 600, networkMax = Math.max(300, max * 10)) {
   // Only trust the hosting provider's client IP header; localhost shares a development bucket.
   const ip = process.env.VERCEL ? request.headers.get("x-vercel-forwarded-for")?.split(",")[0] || "unknown" : "development";
   const store = await cookies();
@@ -46,7 +48,7 @@ export async function rateLimit(request: NextRequest, action: string, max = 8, s
   const result = await adminSupabase().rpc("consume_rate_limit", { p_key: keyFor(browser), p_max: max, p_seconds: seconds });
   dbError(result.error);
   if (!result.data) throw new ApiError("You've made several submissions. Please wait a few minutes and try again.", 429);
-  const network = await adminSupabase().rpc("consume_rate_limit", { p_key: keyFor(`network:${ip}`), p_max: Math.max(300, max * 10), p_seconds: seconds });
+  const network = await adminSupabase().rpc("consume_rate_limit", { p_key: keyFor(`network:${ip}`), p_max: networkMax, p_seconds: seconds });
   dbError(network.error);
   if (!network.data) throw new ApiError("The school is receiving many submissions. Please try again shortly.", 429);
 }

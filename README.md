@@ -103,3 +103,12 @@ Before a school pilot, test sign-in/invitations with the actual email provider, 
 ## Class boards
 
 Students open **Class boards** (`/boards`) in the main navigation or use a teacher’s `/board/<slug>` link. No student account is required. Teachers create boards in their workspace, select a board in their inbox, and pin approved questions to publish them. **Edit board** opens `/teacher/boards/<id>` to rename the board, remove pinned questions, and copy the student link. Renaming preserves existing shared links. Removing a question only removes that board’s publication; the original question stays in the teacher inbox. Answers remain in person, with the Mark answered action recording their status.
+# School email verification
+
+Apply `202610070001_question_replies.sql`, then `202610070002_school_isolation.sql` before deploying this branch. Back up first: existing content is assigned to Druga gimnazija; the migration rejects legacy teachers with another email domain. Map legacy schools explicitly first if needed.
+
+Configure Vercel server variables `SMTP_HOST`, `SMTP_PORT` (587 with STARTTLS or 465 with TLS), `SMTP_USER`, `SMTP_PASSWORD`, and `SMTP_FROM`, then redeploy. Use an authorized sender. These settings are separate from Supabase teacher Auth SMTP settings. Test actual delivery with a school mailbox after configuration.
+
+Only registered exact domains can verify. Druga gimnazija / `2gimnazija.edu.ba` is seeded. For another school, add a `schools` row and `school_domains` entry, populate its directories (including an `Other` location), then invite its administrator using `npm run teacher:invite`. The script derives the school from the registered email domain.
+
+Student emails are processed transiently for SMTP delivery, never stored in SchoolHub tables, Auth accounts, cookies, or content records. SMTP providers may retain delivery logs; do not enable request-body logging. Codes last 10 minutes with five attempts. Verification creates an anonymous seven-day HttpOnly school session, unlinked to posts. Expired verification records are removed on new code requests. Teacher emails remain in Supabase Auth. All content APIs, private receipt links, management links, and debate codes require membership in the same school; direct anonymous Supabase views are revoked.

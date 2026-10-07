@@ -77,3 +77,8 @@
   .app-footer { padding-right: 90px; }
 }
 @media (min-width: 701px) and (max-width: 760px) { .guide-button { bottom: 82px; } .join-shell .guide-button { bottom: 12px; } }
+/* School membership is deliberately separate from anonymous content. */
+.school-access-bar { display:flex; align-items:center; justify-content:space-between; gap:1rem; padding:.5rem 1.5rem; background:var(--paper, #f5f4ef); border-bottom:1px solid #ddd; font-size:.85rem; }
+.page-narrow { max-width:640px; margin:2rem auto; }
+.page-narrow form { padding:1.5rem; }
+.page-narrow input { display:block; width:100%; margin-top:.5rem; padding:.8rem; }

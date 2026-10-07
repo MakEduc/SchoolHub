@@ -1,5 +1,6 @@
 // English source strings keep the catalogue readable.
 export const bosnian: Record<string, string> = {
+  "This link requires verified access to the same school. Keep it private. Use Check for an answer to refresh it.": "Ovaj link zahtijeva potvrđen pristup istoj školi. Čuvajte ga. Koristite Provjeri odgovor za osvježavanje.",
   "Overview": "Pregled",
   "Anonymous Q&A": "Anonimna pitanja",
   "Class boards": "Razredne ploče",
@@ -544,7 +545,7 @@ export const bosnian: Record<string, string> = {
   "A LITTLE HELP TO GET STARTED": "MALA POMOĆ ZA POČETAK",
   "This guide appears once per tool in this browser. Open Guide anytime to read it again.": "Ovaj vodič se prikazuje jednom po alatu u ovom pregledniku. Ponovo ga otvorite dugmetom Vodič.",
   "Welcome to SchoolHub": "Dobro došli u SchoolHub",
-  "Students can use the tools without an account. Teachers sign in with an invited school email.": "Učenici koriste alate bez računa. Nastavnici se prijavljuju pozvanim školskim emailom.",
+  "Students verify their school email without creating an account. Teachers sign in with an invited school email.": "Učenici potvrđuju školski email bez kreiranja računa. Nastavnici se prijavljuju pozvanim školskim emailom.",
   "Choose a tool from the menu. You can switch between English and Bosnian at any time.": "Odaberite alat iz menija. U svakom trenutku možete promijeniti jezik između engleskog i bosanskog.",
   "A guide to anonymous questions": "Vodič za anonimna pitanja",
   "Choose a teacher, department, or school life and write your question.": "Odaberite nastavnika, odsjek ili školski život i napišite pitanje.",
@@ -577,7 +578,7 @@ export const bosnian: Record<string, string> = {
   "Anyone holding the link can read this question and reply. Use Check for an answer to refresh it.": "Svako s linkom može čitati pitanje i odgovor. Koristite Provjeri odgovor za osvježavanje.",
   "A guide to teacher sign-in": "Vodič za nastavničku prijavu",
   "Use the school email invited by your administrator. Open the emailed sign-in link or enter its code.": "Koristite školski email koji je administrator pozvao. Otvorite link iz emaila ili unesite kod.",
-  "Students can use SchoolHub without signing in.": "Učenici mogu koristiti SchoolHub bez prijave.",
+  "Students verify their school email instead of creating an account.": "Učenici potvrđuju školski email umjesto kreiranja računa.",
   "About the terms of service": "O uslovima korištenja",
   "Read the school-use rules here. For questions about the service, contact your school administration.": "Ovdje pročitajte pravila školskog korištenja. Za pitanja o usluzi obratite se upravi škole.",
   "About your privacy": "O vašoj privatnosti",
