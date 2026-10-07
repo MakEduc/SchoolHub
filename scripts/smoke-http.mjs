@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 const base = process.argv[2] || "http://localhost:3000";
-for (const path of ["/", "/ask", "/library", "/library/new", "/debate", "/noise", "/login"]) {
+for (const path of ["/", "/ask", "/library", "/library/new", "/debate", "/noise", "/login", "/verify-school", "/terms", "/privacy", "/question/20000000-0000-4000-8000-000000000001"]) {
   const response = await fetch(`${base}${path}`);
   assert.equal(response.status, 200, `${path} should render`);
   assert.ok((await response.text()).includes("SchoolHub"));
@@ -15,8 +15,19 @@ for (const path of ["/teacher", "/admin", "/teacher/debates/new"]) {
 const unauthorized = await fetch(`${base}/api/teacher`);
 assert.equal(unauthorized.status,401);
 const invalid = await fetch(`${base}/api/questions`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ body: "", recipientType: "general", recipientId: null }) });
-assert.equal(invalid.status,400);
+assert.equal(invalid.status,401);
 const crossSite = await fetch(`${base}/api/questions`, { method: "POST", headers: { "Content-Type": "application/json", Origin: "https://untrusted.invalid" }, body: JSON.stringify({ body: "A test that must not be saved", recipientType: "general", recipientId: null }) });
 assert.equal(crossSite.status,403);
 console.log("PASS unauthorized reads, invalid submissions, and cross-site submissions are rejected");
-console.log("HTTP smoke checks passed. No database records were created.");
+console.log("HTTP smoke checks passed. No content records were created.");
+
+for (const path of ['config','questions','studies','boards','board/test-board','debate/join/ABC123','admin']) {
+ const response = await fetch(`${base}/api/${path}`); assert.equal(response.status,401,`${path} requires school verification`);
+}
+console.log('PASS all school data endpoints require verification');
+for (const path of ["school/request-code", "school/verify-code"]) {
+  const response = await fetch(`${base}/api/${path}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: "schoolhub-test@example.invalid", code: "123456" }) });
+  assert.equal(response.status, 400, `${path} rejects unregistered school domains`);
+  assert.equal((await response.json()).error, "Use an email from a participating school.");
+}
+console.log("PASS unregistered domains cannot request or verify school sign-in. No Auth accounts or emails were created.");

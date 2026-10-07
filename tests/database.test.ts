@@ -20,6 +20,7 @@ test("Postgres schema enforces RLS, public projections, expiration, and atomic d
   await db.exec(`insert into public.study_sessions(programme,grade,subject_id,focus,location_id,starts_at,ends_at,management_token_hash)
     select 'DP','Grade I',s.id,'Legacy session',l.id,now(),now()+interval '1 hour','legacy-key' from public.subjects s cross join public.locations l where s.name='Physics' and l.name='Library';`);
   await db.exec(await readFile(new URL("../supabase/migrations/202610060003_library_details.sql", import.meta.url), "utf8"));
+  await db.exec(await readFile(new URL("../supabase/migrations/202610070001_question_replies.sql", import.meta.url), "utf8"));
   const legacy = (await db.query<{programme:string;custom_location:string;management_token_hash:string}>("select programme,custom_location,management_token_hash from public.study_sessions where focus='Legacy session'")).rows[0];
   assert.deepEqual(legacy, {programme:'IB',custom_location:'Library',management_token_hash:'legacy-key'});
   await db.exec("delete from public.study_sessions where focus='Legacy session'");
@@ -51,6 +52,7 @@ test("Postgres schema enforces RLS, public projections, expiration, and atomic d
     await db.exec("reset role");
   });
   await t.test("public boards expose only approved, explicitly published, nonarchived text", async () => {
+    await db.exec("update public.questions set visibility='public' where body='Personal question'");
     await db.query("insert into public.public_boards(slug,title,owner_id) values ('math-board','Math board',$1)", [teacher]);
     await db.query("insert into public.board_questions(board_id,question_id,published_by) select b.id,q.id,$1 from public.public_boards b cross join public.questions q where q.body='Personal question'", [teacher]);
     await db.exec("set role anon");
@@ -91,6 +93,34 @@ test("Postgres schema enforces RLS, public projections, expiration, and atomic d
     await db.query("select public.mutate_question($1,$2,'restore',null)", [teacher,q]);
     assert.equal((await db.query("select * from public.published_questions")).rows.length,0);
     assert.ok((await db.query("select * from public.staff_actions")).rows.length >= 4);
+  });
+  await t.test("private replies stay out of public views and cannot be published, while public answers are visible", async () => {
+    const privateId = (await db.query<{id: string}>("insert into public.questions(body,recipient_type,teacher_id,receipt_token_hash) values ('Keep this private','teacher',$1,'private-receipt-hash') returning id", [teacher])).rows[0].id;
+    const board = (await db.query<{id: string}>("select id from public.public_boards limit 1")).rows[0].id;
+    await assert.rejects(db.query("select public.answer_question($1,$2,'Unauthorized reply')", [other,privateId]), /Question unavailable/);
+    await assert.rejects(db.query("select public.answer_question($1,$2,'   ')", [teacher,privateId]), /1-2000/);
+    await db.query("select public.answer_question($1,$2,'Your private reply')", [teacher,privateId]);
+    const privateQuestion = (await db.query<{visibility: string; answer: string; status: string}>("select visibility,answer,status from public.questions where id=$1", [privateId])).rows[0];
+    assert.deepEqual(privateQuestion, {visibility:'private',answer:'Your private reply',status:'answered'});
+    await assert.rejects(db.query("select public.mutate_question($1,$2,'pin',$3)", [teacher,privateId,board]), /Private questions cannot be published/);
+    // Even a legacy/direct publication row must not expose a private question.
+    await db.query("insert into public.board_questions(board_id,question_id,published_by) values ($1,$2,$3)", [board,privateId,teacher]);
+    const publicId = (await db.query<{id: string}>("insert into public.questions(body,recipient_type,teacher_id,visibility,receipt_token_hash) values ('A public question','teacher',$1,'public','public-receipt-hash') returning id", [teacher])).rows[0].id;
+    await db.query("select public.answer_question($1,$2,'A public answer')", [teacher,publicId]);
+    await db.query("select public.mutate_question($1,$2,'pin',$3)", [teacher,publicId,board]);
+    await db.exec("set role anon");
+    assert.equal((await db.query("select * from public.published_questions where id=$1", [privateId])).rows.length,0);
+    assert.equal((await db.query("select * from public.public_questions where id=$1", [privateId])).rows.length,0);
+    const visible = (await db.query<Record<string,unknown>>("select * from public.public_questions where id=$1", [publicId])).rows[0];
+    assert.equal(visible.answer,'A public answer');
+    assert.ok(!('receipt_token_hash' in visible)); assert.ok(!('teacher_id' in visible));
+    assert.equal((await db.query<{answer:string}>("select answer from public.published_questions where id=$1", [publicId])).rows[0].answer,'A public answer');
+    await assert.rejects(db.query("select public.answer_question($1,$2,'Forged reply')", [teacher,publicId]), /permission denied/);
+    await db.exec("reset role");
+    await db.query("update public.questions set moderation_status='flagged' where id=$1", [publicId]);
+    assert.equal((await db.query("select * from public.public_questions where id=$1", [publicId])).rows.length,0);
+    await db.query("select public.mutate_question($1,$2,'archive',null)", [teacher,privateId]);
+    await assert.rejects(db.query("select public.answer_question($1,$2,'Archived reply')", [teacher,privateId]), /Restore/);
   });
   await t.test("rate-limit increments are atomic and reset on expiry", async () => {
     assert.equal((await db.query<{ allowed: boolean }>("select public.consume_rate_limit('test',2,600) as allowed")).rows[0].allowed, true);

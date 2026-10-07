@@ -6,9 +6,11 @@ if (!email || !displayName || !["admin", "teacher"].includes(role)) {
 const db = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SECRET_KEY, { auth: { persistSession: false } });
 const preflight = await db.from("teacher_profiles").select("id").limit(1);
 if (preflight.error) { console.error("Apply the SchoolHub database migration first."); process.exit(1); }
+const domain = await db.from("school_domains").select("school_id,school:schools!inner(active)").eq("domain", email.split("@")[1]?.toLowerCase() || "").eq("school.active", true).maybeSingle();
+if (domain.error || !domain.data) { console.error("Register this school's domain and apply the school isolation migration first."); process.exit(1); }
 const site = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
 const { data, error } = await db.auth.admin.inviteUserByEmail(email, { redirectTo: `${site}/teacher` });
 if (error || !data.user) { console.error("Unable to invite teacher. Check the email address and Supabase email delivery configuration."); process.exit(1); }
-const profile = await db.from("teacher_profiles").insert({ id: data.user.id, display_name: displayName, role, handles_general: role === "admin" });
+const profile = await db.from("teacher_profiles").insert({ id: data.user.id, display_name: displayName, school_id: domain.data.school_id, role, handles_general: role === "admin" });
 if (profile.error) { await db.auth.admin.deleteUser(data.user.id); console.error("Could not save the teacher profile. No account was kept."); process.exit(1); }
 console.log(`Invitation sent. ${role === "admin" ? "Administrator" : "Teacher"} profile is ready.`);

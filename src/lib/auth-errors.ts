@@ -1,4 +1,4 @@
-export function signInErrorMessage(error: { code?: string; message?: string; status?: number }) {
+export function signInErrorMessage(error: { code?: string; message?: string; status?: number }, audience: "student" | "teacher" = "teacher") {
   switch (error.code) {
     case "over_email_send_rate_limit":
       return "Supabase's email sending limit has been reached. Wait before trying again, or ask your administrator to configure custom SMTP in Supabase.";
@@ -10,7 +10,7 @@ export function signInErrorMessage(error: { code?: string; message?: string; sta
       return "Open your teacher invitation email and confirm your account first, then sign in.";
     case "signup_disabled":
     case "user_not_found":
-      return "Use the email address from your teacher invitation. Ask your school administrator to invite you if you do not have an invitation.";
+      return audience === "student" ? "Student email sign-in is disabled. Your administrator needs to allow new users in Supabase Authentication." : "Use the email address from your teacher invitation. Ask your school administrator to invite you if you do not have an invitation.";
     case "email_provider_disabled":
     case "otp_disabled":
       return "Email sign-in is disabled. Your administrator needs to enable email sign-in in Supabase Authentication.";
