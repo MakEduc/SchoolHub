@@ -41,6 +41,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const previewStudent = () => { localStorage.setItem("schoolhub-role", "student"); setArmPreview(false); router.push("/"); };
   const signOut = async () => { await browserSupabase().auth.signOut(); router.push("/"); router.refresh(); };
   const pageName = links.find(l => pathname === l.href || (l.href !== "/" && pathname.startsWith(l.href)))?.label || (isTeacher ? "Teacher workspace" : "SchoolHub");
+  if (pathname === "/login" || pathname === "/verify-school") return <>{children}<ToolGuide key={pathname} /></>;
   if (standalone) return <div className="join-shell"><Link href="/" aria-label={t("SchoolHub home")}><Brand /></Link><LanguageSwitcher /><main id="main-content">{children}</main><ToolGuide key={pathname} /><p className="join-footer">{t("A little more connected. A lot more together.")}</p><div className="legal-links join-legal"><Link href="/terms">{t("Terms of service")}</Link><Link href="/privacy">{t("Privacy policy")}</Link></div></div>;
   return <div className="app-shell">
     <aside className="sidebar">

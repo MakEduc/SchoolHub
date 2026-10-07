@@ -3,7 +3,9 @@ import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
 import { api, ApiClientError } from "@/lib/api-client";
-import { LanguageSwitcher, useLanguage } from "./language";
+import { AuthFrame } from "./auth-frame";
+import { ArrowRight, ShieldCheck } from "lucide-react";
+import { useLanguage } from "./language";
 
 // A full navigation clears school-scoped component caches when changing membership.
 /* eslint-disable @next/next/no-location-assign-relative-destination */
@@ -22,6 +24,12 @@ export function SchoolGate({ children }: { children: React.ReactNode }) {
     return () => { alive = false; };
   }, [pathname, publicPage, language]);
   if (publicPage) return children;
-  if (!access) return <main id="main-content" className="main-content"><LanguageSwitcher /><div className="panel"><h1>{language === "bs" ? "Vaša škola. Vaš prostor." : "Your school. Your space."}</h1>{error ? <><p role="alert">{t(error)}</p><button className="button" onClick={() => window.location.reload()}>{language === "bs" ? "Pokušaj ponovo" : "Try again"}</button><p><Link href="/login">{language === "bs" ? "Prijava nastavnika" : "Teacher sign-in"}</Link> · <Link href="/privacy">{language === "bs" ? "Politika privatnosti" : "Privacy policy"}</Link></p></> : access === undefined ? <p role="status">{language === "bs" ? "Provjeravamo pristup…" : "Checking access…"}</p> : <><p>{language === "bs" ? "Potvrdite školski email da pristupite sadržajima samo svoje škole. Ne pohranjujemo email učenika." : "Verify your school email to access only your school’s content. We do not store student emails."}</p><Link className="button" href="/verify-school" onClick={e => { e.preventDefault(); window.location.assign(`/verify-school#next=${encodeURIComponent(window.location.pathname + window.location.search + window.location.hash)}`); }}>{language === "bs" ? "Potvrdite školu" : "Verify your school"}</Link><p><Link href="/login">{language === "bs" ? "Prijava nastavnika" : "Teacher sign-in"}</Link> · <Link href="/privacy">{language === "bs" ? "Politika privatnosti" : "Privacy policy"}</Link></p></>}</div></main>;
+  if (!access) return <AuthFrame role="student" title={language === "bs" ? "Dobro došli u svoju školu." : "Welcome to your school."} description={language === "bs" ? "Jedno mjesto za pitanja, zajedničko učenje i bolji školski dan. Prvo potvrdite svoju školu." : "A place for questions, shared study, and a better school day. First, let’s confirm your school."}>
+    {error ? <div className="auth-entry-error"><p role="alert">{t(error)}</p><button className="button primary" onClick={() => window.location.reload()}>{language === "bs" ? "Pokušaj ponovo" : "Try again"}<ArrowRight size={17} /></button></div> : access === undefined ? <p className="auth-loading" role="status">{language === "bs" ? "Provjeravamo pristup…" : "Checking access…"}</p> : <>
+      <Link className="button primary auth-entry-button" href="/verify-school" onClick={e => { e.preventDefault(); window.location.assign(`/verify-school#next=${encodeURIComponent(window.location.pathname + window.location.search + window.location.hash)}`); }}>{language === "bs" ? "Potvrdite školski email" : "Verify your school email"}<ArrowRight size={17} /></Link>
+      <p className="auth-entry-caption">{language === "bs" ? "Račun nije potreban. Samo vaš školski email." : "No account to create. Just your school email."}</p>
+      <div className="auth-reassurance"><ShieldCheck size={19} /><div><strong>{language === "bs" ? "Pripada samo vašoj školi." : "Only your school. Only your community."}</strong><p>{language === "bs" ? "Objave su vidljive samo članovima iste škole. Email učenika ne pohranjujemo." : "Posts are visible only to members of the same school. Student emails are never stored by SchoolHub."}</p></div></div>
+    </>}
+  </AuthFrame>;
   return <><div className="school-access-bar"><span>{access.schoolName}</span><button className="button ghost small" onClick={async () => { await api("school/leave", {}); const { browserSupabase } = await import("@/lib/supabase/browser"); await browserSupabase().auth.signOut(); window.location.assign("/verify-school"); }}>{language === "bs" ? "Odjava škole" : "Leave school"}</button></div>{children}</>;
 }
